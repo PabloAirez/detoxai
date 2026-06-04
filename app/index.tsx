@@ -12,11 +12,13 @@ export default function LoginScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    getSession().then((session) => {
-      if (session) {
-        router.replace('/(tabs)');
-      }
-    });
+    getSession()
+      .then((session) => {
+        if (session) {
+          router.replace('/(tabs)');
+        }
+      })
+      .catch(() => {});
   }, [router]);
 
   async function handleLogin() {

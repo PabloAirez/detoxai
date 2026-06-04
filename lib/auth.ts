@@ -1,44 +1,66 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Crypto from 'expo-crypto';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { getFirebaseFirestore } from './firebase';
 
 export type LocalUser = {
   email: string;
-  password: string;
+  passwordHash: string;
+  createdAt: string;
 };
 
-const USERS_KEY = '@detoxai/users';
+export type LocalSession = {
+  email: string;
+  startedAt: string;
+};
+
 const SESSION_KEY = '@detoxai/session';
 
-async function getUsers() {
-  const users = await AsyncStorage.getItem(USERS_KEY);
-  return users ? (JSON.parse(users) as LocalUser[]) : [];
+function normalizeEmail(email: string) {
+  return email.trim().toLowerCase();
 }
 
-async function setUsers(users: LocalUser[]) {
-  await AsyncStorage.setItem(USERS_KEY, JSON.stringify(users));
+function emailKey(email: string) {
+  return normalizeEmail(email).replaceAll('.', ',');
+}
+
+function userDoc(email: string) {
+  return doc(getFirebaseFirestore(), 'users', emailKey(email));
+}
+
+async function hashPassword(password: string) {
+  return Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, password);
 }
 
 export async function createAccount(email: string, password: string) {
-  const normalizedEmail = email.trim().toLowerCase();
-  const users = await getUsers();
-  const userExists = users.some((user) => user.email === normalizedEmail);
+  const normalizedEmail = normalizeEmail(email);
+  const snapshot = await getDoc(userDoc(normalizedEmail));
 
-  if (userExists) {
+  if (snapshot.exists()) {
     throw new Error('E-mail ja cadastrado.');
   }
 
-  const user = { email: normalizedEmail, password };
-  await setUsers([...users, user]);
+  await setDoc(userDoc(normalizedEmail), {
+    email: normalizedEmail,
+    passwordHash: await hashPassword(password),
+    createdAt: new Date().toISOString(),
+  } satisfies LocalUser);
+
   await startSession(normalizedEmail);
 }
 
 export async function login(email: string, password: string) {
-  const normalizedEmail = email.trim().toLowerCase();
-  const users = await getUsers();
-  const user = users.find(
-    (storedUser) => storedUser.email === normalizedEmail && storedUser.password === password,
-  );
+  const normalizedEmail = normalizeEmail(email);
+  const snapshot = await getDoc(userDoc(normalizedEmail));
 
-  if (!user) {
+  if (!snapshot.exists()) {
+    throw new Error('E-mail ou senha invalidos.');
+  }
+
+  const user = snapshot.data() as LocalUser;
+  const passwordHash = await hashPassword(password);
+
+  if (user.passwordHash !== passwordHash) {
     throw new Error('E-mail ou senha invalidos.');
   }
 
@@ -49,13 +71,18 @@ export async function startSession(email: string) {
   await AsyncStorage.setItem(
     SESSION_KEY,
     JSON.stringify({
-      email,
+      email: normalizeEmail(email),
       startedAt: new Date().toISOString(),
-    }),
+    } satisfies LocalSession),
   );
 }
 
 export async function getSession() {
   const session = await AsyncStorage.getItem(SESSION_KEY);
-  return session ? (JSON.parse(session) as { email: string; startedAt: string }) : null;
+  return session ? (JSON.parse(session) as LocalSession) : null;
+}
+
+export async function deleteSession() {
+  await AsyncStorage.removeItem(SESSION_KEY);
+  return;
 }
