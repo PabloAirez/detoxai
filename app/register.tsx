@@ -1,39 +1,42 @@
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Pressable, SafeAreaView, StyleSheet, Text, TextInput, View } from 'react-native';
-import { getSession, login } from '../lib/auth';
+import { createAccount } from '../lib/auth';
 
-export default function LoginScreen() {
+export default function RegisterScreen() {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  useEffect(() => {
-    getSession().then((session) => {
-      if (session) {
-        router.replace('/(tabs)');
-      }
-    });
-  }, [router]);
-
-  async function handleLogin() {
+  async function handleCreateAccount() {
     const nextEmail = email.trim();
 
-    if (!nextEmail || !password) {
-      setError('Informe e-mail e senha.');
+    if (!nextEmail || !password || !confirmPassword) {
+      setError('Preencha todos os campos.');
+      return;
+    }
+
+    if (password.length < 6) {
+      setError('A senha precisa ter pelo menos 6 caracteres.');
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      setError('As senhas nao conferem.');
       return;
     }
 
     try {
       setError('');
       setIsSubmitting(true);
-      await login(nextEmail, password);
+      await createAccount(nextEmail, password);
       router.replace('/(tabs)');
     } catch (caughtError) {
-      setError(caughtError instanceof Error ? caughtError.message : 'Falha ao acessar.');
+      setError(caughtError instanceof Error ? caughtError.message : 'Falha ao criar conta.');
     } finally {
       setIsSubmitting(false);
     }
@@ -45,15 +48,15 @@ export default function LoginScreen() {
 
       <View style={styles.header}>
         <Text style={styles.statusIcon}>&gt;</Text>
-        <Text style={styles.headerText}>DETOX.AI // STATUS: ONLINE</Text>
+        <Text style={styles.headerText}>DETOX.AI // NOVO ALVO</Text>
       </View>
 
       <View style={styles.content}>
         <View style={styles.spacer} />
 
         <View style={styles.form}>
-          <Text style={styles.title}>IDENTIFIQUE-SE</Text>
-          <Text style={styles.subtitle}>VOLTE PARA A SUA ROTINA DE DOPAMINA BARATA.</Text>
+          <Text style={styles.title}>CADASTRE-SE</Text>
+          <Text style={styles.subtitle}>CRIE SUA CHAVE E ENTRE NO PROTOCOLO.</Text>
 
           <View style={styles.fieldGroup}>
             <Text style={styles.label}>E-MAIL DO ALVO</Text>
@@ -80,20 +83,32 @@ export default function LoginScreen() {
             />
           </View>
 
+          <View style={styles.fieldGroup}>
+            <Text style={styles.label}>CONFIRMAR CHAVE</Text>
+            <TextInput
+              onChangeText={setConfirmPassword}
+              placeholder="********"
+              placeholderTextColor={colors.placeholder}
+              secureTextEntry
+              style={styles.input}
+              value={confirmPassword}
+            />
+          </View>
+
           {error ? <Text style={styles.error}>{error}</Text> : null}
 
           <Pressable
             disabled={isSubmitting}
             style={[styles.button, isSubmitting && styles.buttonDisabled]}
-            onPress={handleLogin}
+            onPress={handleCreateAccount}
           >
-            <Text style={styles.buttonText}>{isSubmitting ? 'VALIDANDO...' : 'ACESSAR O VICIO'}</Text>
+            <Text style={styles.buttonText}>{isSubmitting ? 'CRIANDO...' : 'CRIAR CONTA'}</Text>
           </Pressable>
 
           <View style={styles.divider} />
 
-          <Pressable onPress={() => router.push('/register')}>
-            <Text style={styles.createAccount}>CRIAR NOVA CONTA &gt;</Text>
+          <Pressable onPress={() => router.back()}>
+            <Text style={styles.createAccount}>&lt; VOLTAR PARA LOGIN</Text>
           </Pressable>
         </View>
       </View>
@@ -150,7 +165,7 @@ const styles = StyleSheet.create({
   },
   spacer: {
     flex: 1,
-    minHeight: 210,
+    minHeight: 140,
   },
   form: {
     width: '100%',
@@ -172,7 +187,7 @@ const styles = StyleSheet.create({
     marginBottom: 36,
   },
   fieldGroup: {
-    marginBottom: 33,
+    marginBottom: 29,
   },
   label: {
     color: colors.muted,
@@ -192,6 +207,15 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     letterSpacing: 1.2,
     padding: 0,
+  },
+  error: {
+    color: colors.neon,
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '800',
+    letterSpacing: 1,
+    marginTop: -9,
+    marginBottom: 17,
   },
   button: {
     height: 55,
@@ -214,15 +238,6 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     fontWeight: '900',
     letterSpacing: 1.7,
-  },
-  error: {
-    color: colors.neon,
-    fontSize: 12,
-    lineHeight: 17,
-    fontWeight: '800',
-    letterSpacing: 1,
-    marginTop: -13,
-    marginBottom: 17,
   },
   divider: {
     height: 1,
