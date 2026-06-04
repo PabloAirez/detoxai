@@ -1,11 +1,14 @@
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, SafeAreaView, StyleSheet, Text, TextInput, View } from 'react-native';
-import { createAccount } from '../lib/auth';
+import { Pressable, SafeAreaView, StyleSheet, Text, TextInput, View, ActivityIndicator } from 'react-native';
+import { useAuth } from '../src/hooks/useAuth';
 
 export default function RegisterScreen() {
   const router = useRouter();
+  const { register, loading, error: authError } = useAuth();
+
+  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -13,9 +16,10 @@ export default function RegisterScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   async function handleCreateAccount() {
+    const nextName = name.trim();
     const nextEmail = email.trim();
 
-    if (!nextEmail || !password || !confirmPassword) {
+    if (!nextName || !nextEmail || !password || !confirmPassword) {
       setError('Preencha todos os campos.');
       return;
     }
@@ -26,17 +30,25 @@ export default function RegisterScreen() {
     }
 
     if (password !== confirmPassword) {
-      setError('As senhas nao conferem.');
+      setError('As senhas não conferem.');
+      return;
+    }
+
+    // Validação básica de email
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(nextEmail)) {
+      setError('Email inválido.');
       return;
     }
 
     try {
       setError('');
       setIsSubmitting(true);
-      await createAccount(nextEmail, password);
+      await register(nextEmail, password, nextName);
       router.replace('/(tabs)');
-    } catch (caughtError) {
-      setError(caughtError instanceof Error ? caughtError.message : 'Falha ao criar conta.');
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Falha ao criar conta.';
+      setError(errorMessage);
     } finally {
       setIsSubmitting(false);
     }
@@ -59,6 +71,18 @@ export default function RegisterScreen() {
           <Text style={styles.subtitle}>CRIE SUA CHAVE E ENTRE NO PROTOCOLO.</Text>
 
           <View style={styles.fieldGroup}>
+            <Text style={styles.label}>SEU NOME</Text>
+            <TextInput
+              onChangeText={setName}
+              placeholder="SEU NOME COMPLETO"
+              placeholderTextColor={colors.placeholder}
+              style={styles.input}
+              value={name}
+              editable={!isSubmitting}
+            />
+          </View>
+
+          <View style={styles.fieldGroup}>
             <Text style={styles.label}>E-MAIL DO ALVO</Text>
             <TextInput
               autoCapitalize="none"
@@ -68,6 +92,7 @@ export default function RegisterScreen() {
               placeholderTextColor={colors.placeholder}
               style={styles.input}
               value={email}
+              editable={!isSubmitting}
             />
           </View>
 
@@ -75,11 +100,12 @@ export default function RegisterScreen() {
             <Text style={styles.label}>CHAVE DE ACESSO</Text>
             <TextInput
               onChangeText={setPassword}
-              placeholder="********"
+              placeholder="MÍN. 6 CARACTERES"
               placeholderTextColor={colors.placeholder}
               secureTextEntry
               style={styles.input}
               value={password}
+              editable={!isSubmitting}
             />
           </View>
 
@@ -87,27 +113,33 @@ export default function RegisterScreen() {
             <Text style={styles.label}>CONFIRMAR CHAVE</Text>
             <TextInput
               onChangeText={setConfirmPassword}
-              placeholder="********"
+              placeholder="REPITA A CHAVE"
               placeholderTextColor={colors.placeholder}
               secureTextEntry
               style={styles.input}
               value={confirmPassword}
+              editable={!isSubmitting}
             />
           </View>
 
           {error ? <Text style={styles.error}>{error}</Text> : null}
+          {authError ? <Text style={styles.error}>{authError}</Text> : null}
 
           <Pressable
             disabled={isSubmitting}
             style={[styles.button, isSubmitting && styles.buttonDisabled]}
             onPress={handleCreateAccount}
           >
-            <Text style={styles.buttonText}>{isSubmitting ? 'CRIANDO...' : 'CRIAR CONTA'}</Text>
+            {isSubmitting ? (
+              <ActivityIndicator color={colors.neonDark} />
+            ) : (
+              <Text style={styles.buttonText}>CRIAR CONTA</Text>
+            )}
           </Pressable>
 
           <View style={styles.divider} />
 
-          <Pressable onPress={() => router.back()}>
+          <Pressable onPress={() => router.back()} disabled={isSubmitting}>
             <Text style={styles.createAccount}>&lt; VOLTAR PARA LOGIN</Text>
           </Pressable>
         </View>
@@ -165,7 +197,7 @@ const styles = StyleSheet.create({
   },
   spacer: {
     flex: 1,
-    minHeight: 140,
+    minHeight: 100,
   },
   form: {
     width: '100%',
@@ -187,7 +219,7 @@ const styles = StyleSheet.create({
     marginBottom: 36,
   },
   fieldGroup: {
-    marginBottom: 29,
+    marginBottom: 24,
   },
   label: {
     color: colors.muted,
@@ -209,7 +241,7 @@ const styles = StyleSheet.create({
     padding: 0,
   },
   error: {
-    color: colors.neon,
+    color: '#ff6b6b',
     fontSize: 12,
     lineHeight: 17,
     fontWeight: '800',

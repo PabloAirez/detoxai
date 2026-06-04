@@ -1,7 +1,10 @@
 import { getApps, initializeApp } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
+import { getAuth } from 'firebase/auth';
 
-export function getFirebaseFirestore() {
+let firebaseApp = getApps().length ? getApps()[0] : null;
+
+function initializeFirebase() {
   const firebaseConfig = {
     apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
     authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN,
@@ -21,6 +24,24 @@ export function getFirebaseFirestore() {
     throw new Error(`Firebase config ausente: ${missingConfig.join(', ')}`);
   }
 
-  const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
-  return getFirestore(app);
+  if (!firebaseApp) {
+    firebaseApp = initializeApp(firebaseConfig);
+  }
+
+  return firebaseApp;
+}
+
+export function getFirebaseApp() {
+  if (!firebaseApp) {
+    return initializeFirebase();
+  }
+  return firebaseApp;
+}
+
+export function getFirebaseAuth() {
+  return getAuth(getFirebaseApp());
+}
+
+export function getFirebaseFirestore() {
+  return getFirestore(getFirebaseApp());
 }

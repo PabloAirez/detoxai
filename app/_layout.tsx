@@ -1,11 +1,11 @@
 import { Stack } from 'expo-router';
+import { AuthProvider } from '../src/contexts/AuthContext';
+import { AuthNavigator } from './AuthNavigator';
 
 export default function RootLayout() {
   return (
-    <Stack screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="index" />
-      <Stack.Screen name="register" />
-      <Stack.Screen name="(tabs)" />
-    </Stack>
+    <AuthProvider>
+      <AuthNavigator />
+    </AuthProvider>
   );
 }

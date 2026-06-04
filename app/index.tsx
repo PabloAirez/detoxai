@@ -1,25 +1,46 @@
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Pressable, SafeAreaView, StyleSheet, Text, TextInput, View } from 'react-native';
-import { getSession, login } from '../lib/auth';
+import { Pressable, SafeAreaView, StyleSheet, Text, TextInput, View, ActivityIndicator, Alert } from 'react-native';
+import * as Google from 'expo-auth-session/providers/google';
+import * as WebBrowser from 'expo-web-browser';
+import { Feather } from '@expo/vector-icons';
+import { useAuth } from '../src/hooks/useAuth';
+
+WebBrowser.maybeCompleteAuthSession();
 
 export default function LoginScreen() {
   const router = useRouter();
+  const { login, loginWithGoogle, user, loading, error: authError } = useAuth();
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState('');
 
+  const [request, response, promptAsync] = Google.useAuthRequest({
+    clientId: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID || '',
+    redirectUrl: Google.useAuthRequest({
+      clientId: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID || '',
+    })[2]?.url || '',
+  });
+
+  // Efeito para processar resposta do Google
   useEffect(() => {
-    getSession()
-      .then((session) => {
-        if (session) {
-          router.replace('/(tabs)');
-        }
-      })
-      .catch(() => {});
-  }, [router]);
+    if (response?.type === 'success') {
+      const { id_token } = response.params;
+      handleGoogleLogin(id_token);
+    }
+  }, [response]);
+
+  // Redirecionar se já autenticado
+  useEffect(() => {
+    if (user && !loading) {
+      router.replace('/(tabs)');
+    }
+  }, [user, loading, router]);
 
   async function handleLogin() {
     const nextEmail = email.trim();
@@ -33,12 +54,34 @@ export default function LoginScreen() {
       setError('');
       setIsSubmitting(true);
       await login(nextEmail, password);
-      router.replace('/(tabs)');
-    } catch (caughtError) {
-      setError(caughtError instanceof Error ? caughtError.message : 'Falha ao acessar.');
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Falha ao acessar.';
+      setError(errorMessage);
     } finally {
       setIsSubmitting(false);
     }
+  }
+
+  async function handleGoogleLogin(idToken: string) {
+    try {
+      setError('');
+      setIsSubmitting(true);
+      await loginWithGoogle(idToken);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Falha ao acessar com Google.';
+      setError(errorMessage);
+      Alert.alert('Erro', errorMessage);
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  if (loading) {
+    return (
+      <SafeAreaView style={[styles.screen, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color={colors.neon} />
+      </SafeAreaView>
+    );
   }
 
   return (
@@ -67,6 +110,7 @@ export default function LoginScreen() {
               placeholderTextColor={colors.placeholder}
               style={styles.input}
               value={email}
+              editable={!isSubmitting}
             />
           </View>
 
@@ -79,22 +123,43 @@ export default function LoginScreen() {
               secureTextEntry
               style={styles.input}
               value={password}
+              editable={!isSubmitting}
             />
           </View>
 
           {error ? <Text style={styles.error}>{error}</Text> : null}
+          {authError ? <Text style={styles.error}>{authError}</Text> : null}
 
           <Pressable
             disabled={isSubmitting}
             style={[styles.button, isSubmitting && styles.buttonDisabled]}
             onPress={handleLogin}
           >
-            <Text style={styles.buttonText}>{isSubmitting ? 'VALIDANDO...' : 'ACESSAR O VICIO'}</Text>
+            {isSubmitting ? (
+              <ActivityIndicator color={colors.neonDark} />
+            ) : (
+              <Text style={styles.buttonText}>ACESSAR O VICIO</Text>
+            )}
+          </Pressable>
+
+          <Pressable onPress={() => setShowForgotPassword(!showForgotPassword)} style={styles.forgotPasswordButton}>
+            <Text style={styles.forgotPasswordText}>ESQUECEU SUA SENHA?</Text>
           </Pressable>
 
           <View style={styles.divider} />
 
-          <Pressable onPress={() => router.push('/register')}>
+          <Pressable
+            disabled={isSubmitting || !request}
+            onPress={() => promptAsync()}
+            style={[styles.googleButton, (isSubmitting || !request) && styles.buttonDisabled]}
+          >
+            <Feather name="mail" size={20} color={colors.text} />
+            <Text style={styles.googleButtonText}>ENTRAR COM GOOGLE</Text>
+          </Pressable>
+
+          <View style={styles.divider} />
+
+          <Pressable onPress={() => router.push('/register')} disabled={isSubmitting}>
             <Text style={styles.createAccount}>CRIAR NOVA CONTA &gt;</Text>
           </Pressable>
         </View>
@@ -217,8 +282,27 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     letterSpacing: 1.7,
   },
+  googleButton: {
+    height: 55,
+    backgroundColor: colors.background,
+    borderWidth: 1,
+    borderColor: colors.neon,
+    borderRadius: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 12,
+  },
+  googleButtonText: {
+    color: colors.text,
+    fontSize: 15,
+    lineHeight: 20,
+    fontWeight: '900',
+    letterSpacing: 1.7,
+  },
   error: {
-    color: colors.neon,
+    color: '#ff6b6b',
     fontSize: 12,
     lineHeight: 17,
     fontWeight: '800',
@@ -231,6 +315,18 @@ const styles = StyleSheet.create({
     backgroundColor: colors.line,
     marginTop: 26,
     marginBottom: 17,
+  },
+  forgotPasswordButton: {
+    marginTop: 12,
+    paddingVertical: 8,
+  },
+  forgotPasswordText: {
+    color: colors.muted,
+    textAlign: 'center',
+    fontSize: 11,
+    lineHeight: 16,
+    fontWeight: '800',
+    letterSpacing: 1.5,
   },
   createAccount: {
     color: colors.text,

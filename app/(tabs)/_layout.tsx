@@ -1,42 +1,63 @@
-import { Tabs, useRouter } from 'expo-router';
-import { useEffect } from 'react';
-import { getSession, deleteSession} from '../../lib/auth';
-import { Pressable } from 'react-native';
+import { Tabs } from 'expo-router';
+import { Pressable, Alert, ActivityIndicator } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import { useAuth } from '../../src/hooks/useAuth';
+import { useState } from 'react';
 
 export default function TabsLayout() {
-  const router = useRouter();
-
-  useEffect(() => {
-    getSession()
-      .then((session) => {
-        if (!session) {
-          router.replace('/');
-        }
-      })
-      .catch(() => router.replace('/'));
-  }, [router]);
+  const { logout, loading: isLoggingOut } = useAuth();
+  const [isProcessing, setIsProcessing] = useState(false);
 
   const handleLogout = async () => {
-      deleteSession();
-      router.replace('/'); // Redirect to login screen after logout
-    };
+    try {
+      setIsProcessing(true);
+      Alert.alert('Confirmar Logout', 'Deseja sair da aplicação?', [
+        {
+          text: 'Cancelar',
+          onPress: () => setIsProcessing(false),
+          style: 'cancel',
+        },
+        {
+          text: 'Sair',
+          onPress: async () => {
+            try {
+              await logout();
+            } catch (error) {
+              Alert.alert('Erro', 'Falha ao fazer logout');
+              setIsProcessing(false);
+            }
+          },
+          style: 'destructive',
+        },
+      ]);
+    } catch (error) {
+      Alert.alert('Erro', 'Algo deu errado');
+      setIsProcessing(false);
+    }
+  };
+
+  const isLoading = isLoggingOut || isProcessing;
 
   return (
     <Tabs screenOptions={{ headerShown: true }}>
-      <Tabs.Screen 
-        name="index" 
-        options={{ 
+      <Tabs.Screen
+        name="index"
+        options={{
           title: 'Home',
           headerRight: () => (
-            <Pressable 
-              onPress={async () => await handleLogout()}
-              style={{ marginRight: 16 }}
+            <Pressable
+              onPress={handleLogout}
+              disabled={isLoading}
+              style={{ marginRight: 16, opacity: isLoading ? 0.5 : 1 }}
             >
-              <Feather name="log-out" size={24} color="#FF6B6B" />
+              {isLoading ? (
+                <ActivityIndicator size="small" color="#FF6B6B" />
+              ) : (
+                <Feather name="log-out" size={24} color="#FF6B6B" />
+              )}
             </Pressable>
           ),
-        }} 
+        }}
       />
       <Tabs.Screen name="insights" options={{ title: 'Insights' }} />
       <Tabs.Screen name="goals" options={{ title: 'Metas' }} />
