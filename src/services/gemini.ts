@@ -17,13 +17,13 @@ import {
 // CONFIGURAÇÃO E INICIALIZAÇÃO
 // ============================================================
 
-const GEMINI_API_KEY = process.env.GEMINI_KEY || '';
+const GEMINI_API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY || '';
 
 const DEFAULT_CONFIG: GeminiConfig = {
   apiKey: GEMINI_API_KEY,
   maxTokens: 200,
   timeout: 30000,
-  model: 'gemini-1.5-flash',
+  model: process.env.EXPO_PUBLIC_GEMINI_MODEL || 'gemini-2.5-flash',
 };
 
 let geminiClient: GoogleGenerativeAI | null = null;
@@ -39,7 +39,7 @@ function initializeGemini(): GoogleGenerativeAI {
   if (!DEFAULT_CONFIG.apiKey) {
     throw createError(
       'MISSING_API_KEY',
-      'Chave da API do Gemini não configurada. Verifique GEMINI_KEY no .env'
+      'Chave da API do Gemini não configurada. Verifique EXPO_PUBLIC_GEMINI_API_KEY no .env'
     );
   }
 
@@ -187,15 +187,90 @@ Contexto do usuário será fornecido quando disponível.`,
 // ============================================================
 
 /**
- * Gerar feedback para dashboard
- * @param userData Dados do usuário (uso de apps, estado de ânimo, etc)
+ * Gerar feedback curto para a dashboard DetoxAI.
+ */
+export async function generateDashboardFeedback(
+  appName: string,
+  usageToday: string,
+  goal: string,
+  dopamineStatus?: string
+): Promise<string>;
+/**
+ * Gerar feedback estruturado para dashboards legados.
+ * @param userData Dados do usuario (uso de apps, estado de animo, etc)
  */
 export async function generateDashboardFeedback(
   userData: any
-): Promise<DashboardFeedback> {
+): Promise<DashboardFeedback>;
+export async function generateDashboardFeedback(
+  appNameOrUserData: string | any,
+  usageToday?: string,
+  goal?: string,
+  dopamineStatus?: string
+): Promise<DashboardFeedback | string> {
   try {
     const model = getGeminiModel();
 
+    if (
+      typeof appNameOrUserData === 'string' &&
+      typeof usageToday === 'string' &&
+      typeof goal === 'string'
+    ) {
+      const prompt = `Você é o DetoxAI, um anticoach sarcástico de bem-estar digital.
+
+Dados reais:
+- Uso total hoje: ${usageToday}
+- Meta diária: ${goal}
+- App mais usado: ${appNameOrUserData}
+- Status calculado: ${dopamineStatus ?? 'desconhecido'}
+
+Tarefa:
+Crie um feedback em português brasileiro com:
+1. um veredito opinativo sobre o comportamento;
+2. uma ação concreta para as próximas 2 horas.
+
+Regras obrigatórias:
+- Responda somente JSON válido no formato {"feedback":"frase aqui"}.
+- O valor de "feedback" deve ser uma frase completa.
+- Não devolva apenas a quantidade de horas.
+- Não comece repetindo "você usou X".
+- Não liste os dados.
+- Não use Markdown.
+- Não use asteriscos.
+- Não use rótulos como "Veredito:" ou "Ação:".
+- Pode ser sarcástico, mas útil.
+- Escreva o feedback completo, sem abreviar e sem cortar frases.`;
+
+      const request = {
+        contents: [
+          {
+            role: 'user',
+            parts: [{ text: prompt }],
+          },
+        ],
+        generationConfig: {
+          temperature: 0.9,
+        },
+      };
+
+      const response = await withTimeout(
+        model.generateContent(request),
+        DEFAULT_CONFIG.timeout
+      );
+
+      const textContent = response.response.text();
+      const feedback = parseFeedbackResponse(textContent);
+
+      if (!feedback || feedback.length < 12) {
+        throw new Error(
+          `Gemini não gerou feedback válido. Resposta bruta: ${formatRawGeminiPreview(textContent)}`
+        );
+      }
+
+      return feedback;
+    }
+
+    const userData = appNameOrUserData;
     const prompt = `${SYSTEM_PROMPTS.DASHBOARD_FEEDBACK}
 
 Dados do usuário:
@@ -439,6 +514,62 @@ function parseJsonResponse<T>(text: string): T {
   return JSON.parse(jsonMatch[0]) as T;
 }
 
+function parseFeedbackResponse(text: string): string {
+  try {
+    const parsed = parseJsonResponse<{ feedback?: string }>(text);
+
+    if (typeof parsed.feedback === 'string') {
+      const feedback = sanitizeFeedback(parsed.feedback);
+
+      if (feedback) {
+        return feedback;
+      }
+    }
+  } catch {
+    // O Gemini às vezes ignora o contrato JSON; texto puro ainda é aproveitável.
+  }
+
+  const partialFeedback = extractFeedbackValue(text);
+
+  if (partialFeedback) {
+    return sanitizeFeedback(partialFeedback);
+  }
+
+  return sanitizeFeedback(text);
+}
+
+function extractFeedbackValue(text: string): string {
+  const match = text.match(/["']?feedback["']?\s*:\s*["']?([\s\S]*?)(?:["']\s*[,}]\s*$|[,}]\s*$|$)/i);
+
+  if (!match?.[1]) {
+    return '';
+  }
+
+  return match[1]
+    .replace(/\\n/g, ' ')
+    .replace(/\\"/g, '"')
+    .replace(/\\\\/g, '\\')
+    .replace(/["'}\]]+\s*$/g, '');
+}
+
+function sanitizeFeedback(text: string): string {
+  return text
+    .replace(/```(?:json)?/gi, '')
+    .replace(/\*\*/g, '')
+    .replace(/[*_`#>]/g, '')
+    .replace(/^\s*\{?\s*"?feedback"?\s*:\s*"?/i, '')
+    .replace(/"?\s*\}?\s*$/i, '')
+    .replace(/^(veredito|ação|feedback|resposta)\s*:\s*/i, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function formatRawGeminiPreview(text: string): string {
+  const preview = text.replace(/\s+/g, ' ').trim().slice(0, 180);
+
+  return preview || '[vazio]';
+}
+
 /**
  * Estimar tokens em um texto
  * (Aproximação: 1 token ≈ 4 caracteres)
@@ -461,7 +592,7 @@ export function validateGeminiSetup(): {
   const errors: string[] = [];
 
   if (!DEFAULT_CONFIG.apiKey) {
-    errors.push('GEMINI_KEY não está configurada no .env');
+    errors.push('EXPO_PUBLIC_GEMINI_API_KEY não está configurada no .env');
   }
 
   if (DEFAULT_CONFIG.maxTokens < 50) {

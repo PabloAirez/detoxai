@@ -20,7 +20,7 @@ export function AuthNavigator() {
         <Stack.Screen
           name="(tabs)"
           options={{
-            animationEnabled: false,
+            animation: 'none',
           }}
         />
       ) : (

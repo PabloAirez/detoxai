@@ -1,7 +1,19 @@
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Pressable, SafeAreaView, StyleSheet, Text, TextInput, View, ActivityIndicator, Alert } from 'react-native';
+import {
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import * as Google from 'expo-auth-session/providers/google';
 import * as WebBrowser from 'expo-web-browser';
 import { Feather } from '@expo/vector-icons';
@@ -20,11 +32,8 @@ export default function LoginScreen() {
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [forgotEmail, setForgotEmail] = useState('');
 
-  const [request, response, promptAsync] = Google.useAuthRequest({
+  const [request, response, promptAsync] = Google.useIdTokenAuthRequest({
     clientId: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID || '',
-    redirectUrl: Google.useAuthRequest({
-      clientId: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID || '',
-    })[2]?.url || '',
   });
 
   // Efeito para processar resposta do Google
@@ -93,77 +102,84 @@ export default function LoginScreen() {
         <Text style={styles.headerText}>DETOX.AI // STATUS: ONLINE</Text>
       </View>
 
-      <View style={styles.content}>
-        <View style={styles.spacer} />
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={styles.content}
+      >
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.form}>
+            <Text style={styles.title}>IDENTIFIQUE-SE</Text>
+            <Text style={styles.subtitle}>VOLTE PARA A SUA ROTINA DE DOPAMINA BARATA.</Text>
 
-        <View style={styles.form}>
-          <Text style={styles.title}>IDENTIFIQUE-SE</Text>
-          <Text style={styles.subtitle}>VOLTE PARA A SUA ROTINA DE DOPAMINA BARATA.</Text>
+            <View style={styles.fieldGroup}>
+              <Text style={styles.label}>E-MAIL DO ALVO</Text>
+              <TextInput
+                autoCapitalize="none"
+                keyboardType="email-address"
+                onChangeText={setEmail}
+                placeholder="ALVO@DOMINIO.COM"
+                placeholderTextColor={colors.placeholder}
+                style={styles.input}
+                value={email}
+                editable={!isSubmitting}
+              />
+            </View>
 
-          <View style={styles.fieldGroup}>
-            <Text style={styles.label}>E-MAIL DO ALVO</Text>
-            <TextInput
-              autoCapitalize="none"
-              keyboardType="email-address"
-              onChangeText={setEmail}
-              placeholder="ALVO@DOMINIO.COM"
-              placeholderTextColor={colors.placeholder}
-              style={styles.input}
-              value={email}
-              editable={!isSubmitting}
-            />
+            <View style={styles.fieldGroup}>
+              <Text style={styles.label}>CHAVE DE ACESSO</Text>
+              <TextInput
+                onChangeText={setPassword}
+                placeholder="********"
+                placeholderTextColor={colors.placeholder}
+                secureTextEntry
+                style={styles.input}
+                value={password}
+                editable={!isSubmitting}
+              />
+            </View>
+
+            {error ? <Text style={styles.error}>{error}</Text> : null}
+            {authError ? <Text style={styles.error}>{authError}</Text> : null}
+
+            <Pressable
+              disabled={isSubmitting}
+              style={[styles.button, isSubmitting && styles.buttonDisabled]}
+              onPress={handleLogin}
+            >
+              {isSubmitting ? (
+                <ActivityIndicator color={colors.neonDark} />
+              ) : (
+                <Text style={styles.buttonText}>ACESSAR O VICIO</Text>
+              )}
+            </Pressable>
+
+            <Pressable onPress={() => setShowForgotPassword(!showForgotPassword)} style={styles.forgotPasswordButton}>
+              <Text style={styles.forgotPasswordText}>ESQUECEU SUA SENHA?</Text>
+            </Pressable>
+
+            <View style={styles.divider} />
+
+            <Pressable
+              disabled={isSubmitting || !request}
+              onPress={() => promptAsync()}
+              style={[styles.googleButton, (isSubmitting || !request) && styles.buttonDisabled]}
+            >
+              <Feather name="mail" size={20} color={colors.text} />
+              <Text style={styles.googleButtonText}>ENTRAR COM GOOGLE</Text>
+            </Pressable>
+
+            <View style={styles.divider} />
+
+            <Pressable onPress={() => router.push('/register')} disabled={isSubmitting}>
+              <Text style={styles.createAccount}>CRIAR NOVA CONTA &gt;</Text>
+            </Pressable>
           </View>
-
-          <View style={styles.fieldGroup}>
-            <Text style={styles.label}>CHAVE DE ACESSO</Text>
-            <TextInput
-              onChangeText={setPassword}
-              placeholder="********"
-              placeholderTextColor={colors.placeholder}
-              secureTextEntry
-              style={styles.input}
-              value={password}
-              editable={!isSubmitting}
-            />
-          </View>
-
-          {error ? <Text style={styles.error}>{error}</Text> : null}
-          {authError ? <Text style={styles.error}>{authError}</Text> : null}
-
-          <Pressable
-            disabled={isSubmitting}
-            style={[styles.button, isSubmitting && styles.buttonDisabled]}
-            onPress={handleLogin}
-          >
-            {isSubmitting ? (
-              <ActivityIndicator color={colors.neonDark} />
-            ) : (
-              <Text style={styles.buttonText}>ACESSAR O VICIO</Text>
-            )}
-          </Pressable>
-
-          <Pressable onPress={() => setShowForgotPassword(!showForgotPassword)} style={styles.forgotPasswordButton}>
-            <Text style={styles.forgotPasswordText}>ESQUECEU SUA SENHA?</Text>
-          </Pressable>
-
-          <View style={styles.divider} />
-
-          <Pressable
-            disabled={isSubmitting || !request}
-            onPress={() => promptAsync()}
-            style={[styles.googleButton, (isSubmitting || !request) && styles.buttonDisabled]}
-          >
-            <Feather name="mail" size={20} color={colors.text} />
-            <Text style={styles.googleButtonText}>ENTRAR COM GOOGLE</Text>
-          </Pressable>
-
-          <View style={styles.divider} />
-
-          <Pressable onPress={() => router.push('/register')} disabled={isSubmitting}>
-            <Text style={styles.createAccount}>CRIAR NOVA CONTA &gt;</Text>
-          </Pressable>
-        </View>
-      </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -212,12 +228,13 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    paddingHorizontal: 20,
-    paddingBottom: 36,
   },
-  spacer: {
-    flex: 1,
-    minHeight: 210,
+  scrollContent: {
+    flexGrow: 1,
+    justifyContent: 'flex-end',
+    paddingHorizontal: 20,
+    paddingTop: 64,
+    paddingBottom: 28,
   },
   form: {
     width: '100%',

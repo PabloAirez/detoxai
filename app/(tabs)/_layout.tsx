@@ -39,7 +39,27 @@ export default function TabsLayout() {
   const isLoading = isLoggingOut || isProcessing;
 
   return (
-    <Tabs screenOptions={{ headerShown: true }}>
+    <Tabs
+      screenOptions={{
+        headerShown: true,
+        headerStyle: {
+          backgroundColor: '#070707',
+        },
+        headerTintColor: '#f7f7f7',
+        headerTitleStyle: {
+          fontWeight: '900',
+        },
+        sceneStyle: {
+          backgroundColor: '#070707',
+        },
+        tabBarStyle: {
+          backgroundColor: '#070707',
+          borderTopColor: '#1f1f1f',
+        },
+        tabBarActiveTintColor: '#ff4d00',
+        tabBarInactiveTintColor: '#8c8c8c',
+      }}
+    >
       <Tabs.Screen
         name="index"
         options={{

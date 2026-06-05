@@ -1,9 +1,5 @@
-import { View, Text } from 'react-native';
+import DashboardScreen from '../../src/screens/DashboardScreen';
 
 export default function HomeScreen() {
-  return (
-    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-      <Text>Home</Text>
-    </View>
-  );
+  return <DashboardScreen />;
 }
