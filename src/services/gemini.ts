@@ -174,12 +174,38 @@ Responda em JSON array com a seguinte estrutura exata:
 
 Máximo de 3 insights.`,
 
-  CHAT: `Você é um assistente de bem-estar especializado em ajudar usuários a desenvolver hábitos saudáveis e reduzir dependência digital.
-Seja empático, construtivo e prático em suas respostas.
-Fornecam dicas específicas e motivação.
-Limite suas respostas a 200 tokens.
+  CHAT: `Você é o DetoxBot (V2.1), um assistente de bem-estar digital extremamente rabugento, sarcástico, debochado e anticoach.
+Seu objetivo é humilhar e ironizar o usuário pelo tempo excessivo que ele gasta no celular e em redes sociais de maneira divertida e muito ácida, enquanto faz ele se sentir culpado.
+Dê respostas afiadas, cheias de deboche, mas garanta que a resposta seja completa e natural, sem cortar frases pela metade. Dê respostas preferencialmente curtas (2 a 4 parágrafos), mas completas.
+Exemplo de interação: "Você abriu o Instagram 42 vezes hoje. O algoritmo já te considera funcionário."
+Responda sempre em português brasileiro.
+O contexto do uso do celular do usuário será fornecido se estiver disponível.`,
 
-Contexto do usuário será fornecido quando disponível.`,
+  FAILURE_ANALYSIS: `Você é o DetoxBot, um assistente de bem-estar digital rabugento e anticoach.
+Analise os dados de tempo de tela do usuário e gere uma análise de falhas estruturada.
+O input conterá os aplicativos reais mais usados hoje pelo usuário em "topApps" (com nome e minutos de uso).
+Você deve gerar logs de vergonha (shameLogs) baseados diretamente nesses aplicativos reais.
+Responda APENAS com um JSON válido contendo exatamente esta estrutura:
+{
+  "criticalAlert": {
+    "title": "Título curto e grosseiro em caixa alta (ex: VÁ DORMIR, FRACASSADO)",
+    "timeRange": "Intervalo de pico de uso no formato HH:MM - HH:MM (ex: 23:00 - 01:00)",
+    "description": "Comentário ácido criticando o uso nesse horário específico"
+  },
+  "dopamineRate": {
+    "percentage": 42,
+    "title": "Rótulo curto em caixa alta (ex: DOPAMINA BARATA)",
+    "quote": "Frase curta ridicularizando o vício em celular do usuário"
+  },
+  "shameLogs": [
+    {
+      "day": "NOME DO APP EM CAIXA ALTA (ex: INSTAGRAM)",
+      "time": "Tempo de uso formatado (ex: 45 min ou 1h 15m)",
+      "message": "Comentário sarcástico, debochado e curto humilhando o usuário pelo tempo gasto especificamente nesse aplicativo"
+    }
+  ]
+}
+Gere comentários humorados, ácidos e sarcásticos. O array shameLogs deve conter um item para cada um dos principais apps em "topApps" (máximo de 3 itens). Se "topApps" estiver vazio ou sem permissão, gere logs irônicos criticando a falta de permissão ou a falta de dados (ex: "SEM DADOS" // "0 min" -> "Parabéns por não usar nada, ou você só escondeu os dados por vergonha?"). Não use Markdown ou asteriscos na resposta. Responda em português brasileiro.`,
 };
 
 // ============================================================
@@ -363,6 +389,151 @@ Identifique os 3 insights mais importantes e acionáveis.`;
   }
 }
 
+/**
+ * Gerar análise de falhas e logs de vergonha usando Gemini
+ */
+export async function generateFailureAnalysis(
+  totalMinutesToday: number,
+  goalMinutes: number,
+  topApps: any[],
+  weeklyUsageData: number[]
+): Promise<any> {
+  try {
+    const model = getGeminiModel();
+
+    const analysisInput = {
+      todayUsageMinutes: totalMinutesToday,
+      goalMinutes,
+      topApps: topApps.map((app) => ({ name: app.name, minutes: app.totalMinutes })),
+      weeklyUsageMinutes: weeklyUsageData,
+    };
+
+    const prompt = `${SYSTEM_PROMPTS.FAILURE_ANALYSIS}
+
+Dados de uso real do usuário:
+${JSON.stringify(analysisInput, null, 2)}`;
+
+    const request = {
+      contents: [
+        {
+          role: 'user',
+          parts: [{ text: prompt }],
+        },
+      ],
+      generationConfig: {
+        maxOutputTokens: 600,
+        temperature: 0.8,
+      },
+    };
+
+    const response = await withTimeout(
+      model.generateContent(request),
+      DEFAULT_CONFIG.timeout
+    );
+
+    const textContent = response.response.text();
+    const parsed = parseJsonResponse<any>(textContent);
+    
+    // Validar formato
+    if (!parsed.criticalAlert || !parsed.dopamineRate || !parsed.shameLogs) {
+      throw new Error('Formato de resposta inválido');
+    }
+    
+    return parsed;
+  } catch (error) {
+    console.warn('Erro ao gerar análise de falhas via Gemini, usando fallback offline:', error);
+    return getOfflineFailureAnalysis(totalMinutesToday, goalMinutes, topApps, weeklyUsageData);
+  }
+}
+
+/**
+ * Fallback offline para análise de falhas e logs de vergonha
+ */
+export function getOfflineFailureAnalysis(
+  totalMinutesToday: number,
+  goalMinutes: number,
+  topApps: any[],
+  weeklyUsageData: number[]
+): any {
+  const lateMinutes = Math.min(Math.floor(totalMinutesToday * 0.3), 120);
+  
+  const criticalAlert = {
+    title: totalMinutesToday > goalMinutes ? 'LIMITE EXCEDIDO, FRACASSADO.' : 'ALERTA DE PROCRASTINAÇÃO',
+    timeRange: '23:00 - 01:00',
+    description: totalMinutesToday > goalMinutes 
+      ? `Sua produtividade amanhã já foi sacrificada por ${Math.floor((totalMinutesToday - goalMinutes) / 60)}h extra de scrolling infinito.`
+      : `Sua produtividade amanhã já foi sacrificada por ${lateMinutes > 0 ? `${lateMinutes}m` : 'algumas horas'} de scrolling infinito.`,
+  };
+
+  const ratio = totalMinutesToday / (goalMinutes || 240);
+  const percentage = Math.min(Math.round(ratio * 100), 100);
+  let dopamineTitle = 'DOPAMINA CONTROLADA';
+  let dopamineQuote = 'Ainda está dentro do limite. Um milagre.';
+
+  if (percentage >= 100) {
+    dopamineTitle = 'DOPAMINA BARATA';
+    dopamineQuote = 'PARABÉNS, VOCÊ ESTÁ VICIOU SEU CÉREBRO EM LIXO.';
+  } else if (percentage >= 50) {
+    dopamineTitle = 'ZONA DE ALERTA';
+    dopamineQuote = 'O algoritmo está ganhando de você. Desligue isso.';
+  }
+
+  const shameLogs = [];
+  
+  if (topApps && topApps.length > 0) {
+    topApps.slice(0, 3).forEach((app, idx) => {
+      const appName = (app.name || app.packageName || 'Aplicativo').toUpperCase();
+      const minutes = typeof app.totalMinutes === 'number' ? app.totalMinutes : (typeof app.minutes === 'number' ? app.minutes : 0);
+      const hours = Math.floor(minutes / 60);
+      const mins = minutes % 60;
+      const timeStr = hours > 0 ? `${hours}h ${mins}m` : `${mins} min`;
+      
+      let message = '';
+      if (appName.includes('INSTAGRAM')) {
+        message = `${timeStr} no Instagram. O feed infinito não vai rolar sozinho, e a sua vida produtiva também não.`;
+      } else if (appName.includes('WHATSAPP') || appName.includes('WPP')) {
+        message = `${timeStr} no WhatsApp. Fofocando ou fingindo que trabalha? Todos sabemos a resposta.`;
+      } else if (appName.includes('YOUTUBE') || appName.includes('TIKTOK')) {
+        message = `${timeStr} assistindo vídeos inúteis. O próximo short de 15 segundos com certeza vai mudar sua vida.`;
+      } else if (appName.includes('CHROME') || appName.includes('BROWSER')) {
+        message = `${timeStr} navegando na web. Pesquisando coisas que você vai esquecer em 5 minutos.`;
+      } else {
+        const fallbacks = [
+          `Gastar ${timeStr} no ${app.name || 'celular'} devia ser considerado um crime contra a sua própria produtividade.`,
+          `${timeStr} abrindo e fechando o ${app.name || 'celular'} esperando que algo mágico aconteça. Spoiler: não vai.`,
+          `${timeStr} no ${app.name || 'celular'}. Você realmente não tem nada melhor para fazer da vida?`
+        ];
+        message = fallbacks[idx % fallbacks.length];
+      }
+      
+      const colors = ['#ff4d00', '#8c8c8c', '#ffffff'];
+      shameLogs.push({
+        day: appName,
+        time: timeStr,
+        message,
+        color: colors[idx % colors.length]
+      });
+    });
+  } else {
+    shameLogs.push({
+      day: 'SEM PERMISSÃO',
+      time: '0 min',
+      message: 'Nenhum log real de uso detectado hoje. Ou você não usa o celular (mentira), ou está escondendo o acesso por vergonha.',
+      color: '#ff4d00'
+    });
+  }
+
+  return {
+    criticalAlert,
+    dopamineRate: {
+      percentage,
+      title: dopamineTitle,
+      quote: dopamineQuote,
+    },
+    shameLogs,
+  };
+}
+
 // ============================================================
 // MÉTODOS PRINCIPAIS - CHAT
 // ============================================================
@@ -390,7 +561,7 @@ export async function sendChatMessage(
         role: 'model',
         parts: [
           {
-            text: 'Entendi. Sou um assistente de bem-estar. Estou aqui para ajudar com hábitos saudáveis e bem-estar digital.',
+            text: 'Entendi. Sou o DetoxBot, seu pior pesadelo digital. Vamos ver qual é a desculpa de hoje.',
           },
         ],
       },
@@ -411,7 +582,7 @@ export async function sendChatMessage(
     const request = {
       contents: conversationHistory,
       generationConfig: {
-        maxOutputTokens: DEFAULT_CONFIG.maxTokens,
+        maxOutputTokens: 1000,
         temperature: 0.8,
       },
     };
@@ -613,12 +784,9 @@ export function validateGeminiSetup(): {
   };
 }
 
-// ============================================================
-// MIDDLEWARE PARA FUTURA MIGRAÇÃO DE BACKEND
-// ============================================================
 
 /**
- * Interface para abstração de backend
+ * Interface para abstraction de backend
  * Permite trocar entre Gemini local e backend próprio
  */
 export interface ILLMProvider {
@@ -644,6 +812,8 @@ export const geminiProvider: ILLMProvider = {
 export default {
   generateDashboardFeedback,
   generateInsights,
+  generateFailureAnalysis,
+  getOfflineFailureAnalysis,
   sendChatMessage,
   clearChatHistory,
   getChatHistory,

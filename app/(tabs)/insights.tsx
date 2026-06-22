@@ -1,9 +1,5 @@
-import { View, Text } from 'react-native';
+import InsightsScreen from '../../src/screens/InsightsScreen';
 
-export default function InsightsScreen() {
-  return (
-    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-      <Text>Insights</Text>
-    </View>
-  );
+export default function InsightsRoute() {
+  return <InsightsScreen />;
 }
